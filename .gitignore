@@ -1,0 +1,12 @@
+.DS_Store
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcresult
+.env
+build/
+.swiftpm/
+.env.deploy
+Config/Local.xcconfig
+*.p8

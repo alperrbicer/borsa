@@ -1,0 +1,2 @@
+BORSA_BUNDLE_ID = dev.prototype.borsa
+#include? "Local.xcconfig"

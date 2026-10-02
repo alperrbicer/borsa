@@ -1,0 +1,19 @@
+{
+  "name": "borsa-tools",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.12.0" },
+  "scripts": {
+    "check": "node scripts/ios.mjs check",
+    "test:scripts": "node --test Tests/Scripts/deployment.test.mjs",
+    "mobile:doctor": "node scripts/ios.mjs doctor",
+    "mobile:devices": "node scripts/ios.mjs devices",
+    "mobile:ios:prepare": "node scripts/ios.mjs prepare",
+    "mobile:ios:install": "node scripts/ios.mjs install",
+    "mobile:ios:simulator": "node scripts/ios.mjs simulator",
+    "mobile:ios:archive": "node scripts/ios.mjs archive",
+    "mobile:ios:export": "node scripts/ios.mjs export",
+    "mobile:ios:upload": "node scripts/ios.mjs upload",
+    "mobile:ios:testflight": "node scripts/ios.mjs testflight"
+  }
+}
