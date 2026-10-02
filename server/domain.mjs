@@ -107,7 +107,7 @@ export function placeOrder(state, request, now = Date.now(), {decisionId = null}
   requireValue(!risk,risk)
   const order = {id:request.id,symbol:request.symbol,side:request.side,quantity:request.quantity,remaining:request.quantity,
     limitUnits:request.limitUnits,status:'pending',createdAt:now,expiresAt:now+15*60_000,filledQty:0,grossUnits:0,feesCents:0,
-    executionUnits:null,filledAt:null,decisionId,reason:decisionId ? 'Haber değerlendirmesi' : 'Kullanıcı emri',source:'',lastQuoteAt:null,lastFillQuantity:0}
+    executionUnits:null,filledAt:null,decisionId,reason:decisionId ? 'Haber değerlendirmesi' : 'Kullanıcı emri',source:'',requestedSource:state.quotes[request.symbol].source,lastQuoteAt:null,lastFillQuantity:0}
   const wallet = state.wallets.find(x => x.currency === item.currency)
   if (request.side === 'buy') requireValue(reserve(order,state.settings) <= wallet.cashCents-reservedCash(state,item.currency), 'Kullanılabilir bakiye komisyon dahil yetersiz.')
   else requireValue(request.quantity <= availableShares(state,request.symbol), 'Satılabilir adet yetersiz.')
@@ -136,6 +136,7 @@ export function processOrders(state, now = Date.now()) {
     if (state.settings.mode === 'paused' && order.decisionId) continue
     const q = freshQuote(state,order.symbol,now,true)
     if (!q || q.timestamp <= order.createdAt || q.timestamp <= (order.lastQuoteAt ?? 0)) continue
+    if (order.requestedSource && order.requestedSource!==q.source) { order.status='cancelled'; order.reason='Fiyat kaynağı değişti; yeni kaynakla tekrar değerlendirme gerekli.'; syncDecision(state,order); continue }
     const risk = riskReason(state,{...order,quantity:order.remaining},now,order.id)
     if (risk) { order.status='cancelled'; order.reason=risk; syncDecision(state,order); continue }
     const slip = state.settings.slippageBps
@@ -224,6 +225,7 @@ export function snapshot(state, now = Date.now()) {
       drawdownPercent:value!==null&&baseline?.peak>0?Math.max(0,(baseline.peak-value)/baseline.peak*100):null}
   })
   return {...copy,quotes:undefined,history:undefined,baselines:undefined,appliedActions:undefined,serverTime:now,wallets,
+    orders:copy.orders.slice(0,500).map(({fills,...order})=>order),totalOrders:copy.orders.length,
     instruments:CATALOG.map(i=>({...i,quote:copy.quotes[i.symbol]??null,history:copy.history[i.symbol]??[],blockedReason:quoteBlock(copy,i.symbol,now)})),
     positions:copy.positions.map(p=>{const q=freshQuote(copy,p.symbol,now);const value=q?Math.floor(q.priceUnits*p.quantity/100):null;return {...p,marketValueCents:value,profitCents:value===null?null:value-p.costCents}})}
 }

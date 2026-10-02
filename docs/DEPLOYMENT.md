@@ -4,7 +4,7 @@ CarMirror'daki `package.json` komut düzeni Borsa'nın SwiftUI/Xcode projesine u
 
 ## Başlangıç
 
-macOS, Xcode ve Node.js 22.12+ gerekir. Üçüncü taraf Node paketi yoktur; `bun install` veya `npm install` gerekmez. Bun, npm ya da doğrudan Node kullanılabilir.
+macOS, Xcode ve Node.js 22.12+ gerekir. Üçüncü taraf Node paketi yoktur; `bun install` veya `npm install` gerekmez. Kurulum komutları Bun, npm ya da doğrudan Node ile çağrılabilir. Sunucu, `check` ve HTTPS entegrasyon testleri ayrıca PATH üzerinde Bun gerektirir; bu çalışma Bun 1.3.14 ile doğrulandı.
 
 ```sh
 cd /Users/alperbicer/Documents/projects/private/borsa
@@ -23,7 +23,8 @@ node /Users/alperbicer/Documents/projects/private/borsa/scripts/ios.mjs doctor
 
 | Komut | İşlem |
 | --- | --- |
-| `bun run check` | Dağıtım script testleri, Swift hesap testleri, imzasız simülatör derlemesi |
+| `bun run check` | Dağıtım scriptleri, sunucu, Swift ve yerel HTTPS testleri; imzasız simülatör derlemesi |
+| `bun run test:server` | Sanal hesap, veri, haber, API ve bildirim sunucusu testleri |
 | `bun run test:scripts` | Yalnızca dağıtım script testleri |
 | `bun run mobile:doctor` | Xcode, takım, yerel imzalama sertifikaları ve provisioning profilleri |
 | `bun run mobile:devices` | Eşlenmiş iPhone'lar ve kullanılabilir iPhone simülatörleri |
@@ -86,4 +87,6 @@ Arşivleme build numarasını kaynak değeri ile `build/deploy/last-build.json` 
 
 Her çalıştırmanın DerivedData'sı ve JSON kayıtları `build/deploy/` altında ayrı dizindedir. Bu dizin, Swift derleme önbellekleri ve yerel ayarlar Git'e alınmaz.
 
-Borsa halen demo fiyat ve emir kullanır. Bu komutlar gerçek aracı kurum bağlantısı eklemez. Güncel cihaz/test sonuçları `VALIDATION.md` içindedir.
+Borsa normal kullanımda gerçek kaynakları ve sunucudaki sanal hesabı kullanır; veri yoksa örnek fiyat göstermez. Sunucunun kurulumu, sağlayıcı hesapları ve eşleşme [sunucu rehberinde](SERVER.md) anlatılır. Bu komutlar aracı kuruma gerçek emir göndermez. Güncel cihaz/test sonuçları [VALIDATION.md](../VALIDATION.md) içindedir.
+
+3 Ekim çalışmasında telefon kullanılmadı. Yerel TLS sertifikası düzeltildi; sonraki cihaz kurulumunda `Config/Server.local.xcconfig` içindeki yeni parmak izi derlemeye alınmalı ve uygulama sunucuyla eşleştirilmelidir. Mac'te geçen testler telefonda eşleşme veya APNs teslimi kanıtı değildir.

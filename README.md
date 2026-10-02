@@ -1,63 +1,59 @@
-# Borsa · Kişisel iOS uygulaması
+# Borsa kişisel iOS uygulaması
 
-Türkçe SwiftUI uygulaması: takip listesi, portföy, limit alış/satış denemeleri ve kalıcı emir geçmişi. iOS 17+; üçüncü taraf uygulama paketi gerektirmez.
+BIST ve ABD hisselerini gerçek kaynaklarla izleyen, ayrı TL ve USD bakiyeleriyle sanal işlem yapan SwiftUI uygulaması. Özet, Piyasalar, Portföy ve Asistan ekranlarını; haber değerlendirmelerini ve işlem kurallarını içerir. Gerçek para veya aracı kuruma emir göndermez.
 
-**Canlı piyasa verisi ve aracı kurum bağlantısı henüz yok.** Sekiz BIST hissesi için sabit örnek fiyatlar ve yerel deneme hesabı kullanılır. Gerçek emir gönderilmez. Bu sürüm kişisel cihaz kullanımı için hazırlanmıştır; App Store yayını yapılmaz.
+Normal uygulamada örnek fiyat veya sentetik grafik kullanılmaz. Kaynak yoksa fiyat boş kalır; eski, gecikmeli veya seansı doğrulanamayan veriyle emir gerçekleşmez. Önceki deneme hesabı ayrı saklanır.
 
-BIST ve ABD için gerçek veriye dayalı otomatik sanal işlem hedefi, ücretsiz/ücretli veri seçenekleri ve aşama kabul ölçütleri [geliştirme planında](docs/AUTOMATION_PLAN.md) yer alır. Bu özellikler henüz uygulanmadı.
+## Mevcut bağlantılar
 
-## iPhone'a kurulum
+TCMB ve Fed duyuruları hesap açmadan alınır. ABD fiyatları ve şirket haberleri için Alpaca erişimi; BIST gün içi fiyatları için yetkili sağlayıcı bağlantısı gerekir. Alpaca IEX/SIP, Twelve Data BIST gün sonu ve lisanslı HTTPS veri köprüsü hazırlanmıştır. Henüz fiyat servisi hesabı veya APNs anahtarı tanımlanmamıştır. Bağlantı kodunun hazır olması bu servislerin hesap bazında doğrulandığı anlamına gelmez.
+
+Kurulum ve işletim: [sunucu rehberi](docs/SERVER.md). Güncel kapsam ve fiyatlar: [veri servisleri](docs/DATA_SERVICES.md). Test sonuçları: [doğrulama kaydı](VALIDATION.md). Devam notu: [çalışma durumu](docs/WORK_STATUS.md).
+
+## Başlatma
+
+Bun ve iOS derlemesi için Xcode gerekir. Üçüncü taraf paket kurulumu gerekmez; sunucu Bun'ın SQLite ve HTTPS desteğini kullanır.
 
 ```sh
-cd /Users/alperbicer/Documents/projects/private/borsa
+bun run server:setup
+bun run server:start
+```
+
+Sunucunun Mac oturumunda kendiliğinden başlaması için `bun run server:service:install` kullanılabilir. Bu servis zaten kuruluysa ikinci bir `server:start` süreci açılmaz. `bun run server:service:status` ve `bun run server:service:restart` mevcut servisi yönetir.
+
+Telefon ve Mac aynı yerel ağdayken `bun run server:pair` ile üretilen kod uygulamanın Ayarlar ekranına girilir. Kod üç dakika ve tek kullanım içindir. API anahtarları yalnızca Git dışında tutulan `.env.server` dosyasına yazılır; uygulamaya veya sohbete eklenmez.
+
+## iPhone kurulumu
+
+```sh
 bun run mobile:ios:install
 ```
 
-Tek eşlenmiş iPhone otomatik seçilir. Telefonun bağlı, kilidinin açık ve Geliştirici Modu'nun etkin olması gerekir. Birden fazla cihaz varsa:
+Bu komut mevcut bundle ID ile yükseltir; uygulamayı silmez. Telefon erişimi, kilidin açık olması, Geliştirici Modu ve geçerli imza gerekir. Birden fazla eşlenmiş cihazda `--device` seçilir. Gerekirse `--allow-provisioning-updates` eklenir. Ayrıntılar ve CarMirror'dan uyarlanan diğer komutlar [dağıtım rehberinde](docs/DEPLOYMENT.md).
+
+**3 Ekim çalışması cihaza bağlanmadan yapıldı.** Yeni kaynaklar telefona yüklenmedi. Yerel sertifika düzeltildiği için bir sonraki yetkili kurulum yeni sertifika parmak izini de içermelidir; sonrasında telefon eşleştirilir.
+
+## Sanal işlem kuralları
+
+- Başlangıç 100.000 sanal TL ve 10.000 sanal USD; pozisyonlar sıfırdır. İki para birimi kur uydurularak birleştirilmez.
+- Fiyatlar 1/10.000 para birimi, hesaplar kuruş/sent cinsinden tam sayıdır. Tam hisse adedi kullanılır.
+- Varsayılan komisyon 10 baz puan, olumsuz fiyat kayması 5 baz puandır. 100 baz puan yüzde 1 eder. Komisyon maliyete, kayma gerçekleşme fiyatına yansır.
+- Limit emir 15 dakika geçerlidir. Sonraki kotasyonun yönüne, miktarına, limite, seansa ve risk kontrollerine göre kısmen/tamamen gerçekleşir. Aynı kotasyonun likiditesi tekrar kullanılamaz.
+- Varsayılan sınırlar: hisse yüzde 10, sektör yüzde 30, günlük kayıp yüzde 2, piyasa başına günde 10 emir; otomasyon için aynı hissede 30 dakika bekleme. Günlük kayıp yeni alışları durdurur; pozisyon azaltmaya izin verir.
+- İnceleme modunda insan onayı beklenir. Otomatik modda doğrudan şirket haberi, dar metin kuralları, fiyat tepkisi ve risk kuralları birlikte sağlanır. Makro/çelişkili/belirsiz haberler incelemeye gider. Süresi geçen veya cevapsız inceleme işlem yapmaz.
+- Duraklatma otomasyona ait bekleyen emirleri iptal eder. Kullanıcının ayrıca verdiği manuel emirler kendi iptal düğmeleriyle yönetilir.
+
+Başlık/özet kuralları bir LLM veya kapsamlı haber yorumu değildir. Gerçek borsa takası, vergi, bölünme/temettü muhasebesi ve ayrı hisse durdurma akışı henüz modellenmez. Kotasyon güncelliği/seans koruması, bunların yerine geçtiği iddiasıyla sunulmaz. Ayrıntılı varsayımlar [sunucu rehberindedir](docs/SERVER.md).
+
+## Kayıt ve test
+
+Yeni hesabın yetkili kaydı `.borsa-server/account.sqlite` içindedir. SQLite işlemi başarısızsa değişiklik yayımlanmaz. iPhone Keychain'de bağlantı bilgisini, korumalı dosyada son ekran kaydını tutar. Eski yerel hesap yeni performansa eklenmez. Ayarlar'dan yeni sunucu hesabı veya eski deneme hesabı dışa aktarılabilir; dışa aktarılan JSON şifreli değildir. Otomatik bulut yedeği yoktur.
 
 ```sh
-bun run mobile:ios:install --device 00008140-000E60E20EC0801C
+bun run check         # Script + sunucu + Swift testleri + imzasız iOS derlemesi
+bun run test:server   # Açık dosya listesiyle Bun testleri
+bun run test:scripts # Kurulum scriptleri
+swift test           # Swift modelleri, eski hesap ve yerel HTTPS istemcisi
 ```
 
-Kurulum uygulamayı silmez. Bundle ID `dev.prototype.borsa` korunarak mevcut hesap yükseltilir. `Config/Local.xcconfig` yerel imzalama takımını tutar. Sertifika/profil durumunu `bun run mobile:doctor` ile kontrol edebilirsin. Gerekirse `--allow-provisioning-updates` kullanılır.
-
-CarMirror'dan uyarlanan komutlar ve ayrıntılar: `docs/DEPLOYMENT.md`. Bun yerine npm veya doğrudan Node da kullanılabilir; `bun install` gerekmez.
-
-## Kullanım
-
-- **Piyasa:** hisse, şirket veya sektöre göre Türkçe karakter toleranslı arama; kod, yükseliş, düşüş ve fiyat sıralaması.
-- **Takip:** detay ekranındaki yıldızla şirket ekleme/çıkarma; cihazda kalıcı liste.
-- **Portföy:** toplam varlık, hisse/nakit dağılımı, kullanılabilir ve ayrılan bakiye, gerçekleşen/açık pozisyon kâr/zararı; bakiyeleri gizleme.
-- **Emir:** alış/satış, %25/%50/Tümü adet, limit tutarı, bakiye/adet kontrolleri; ayrı gözden geçirme ve onay.
-- **Geçmiş:** tüm/bekleyen/gerçekleşen/iptal edilen emir filtreleri; onaylı iptal ile nakit veya adet blokajını çözme.
-- **Ayarlar:** koyu/açık/sistem teması, JSON yedek dışa aktarma, doğrulanmış yedekten geri yükleme ve önceki yerel kayda dönme.
-
-Fiyat girişinde `312,50` ve `312.50` kabul edilir; binlik ayırıcılar ve ikiden fazla ondalık basamak reddedilir. Para işlemleri tam sayı kuruş ile hesaplanır.
-
-## Kayıt ve kurtarma
-
-Hesap, takip listesi ve tercihler Application Support içinde tek bir sürümlü JSON dosyasına atomik olarak yazılır. İşlem ancak kayıt başarıyla tamamlanınca ekrana yansır. Önceki geçerli dosya yerel yedek olarak korunur.
-
-Eski UserDefaults kaydı ilk açılışta otomatik taşınır; eski anahtar silinmez. Bozuk veya desteklenmeyen kayıt hesap sıfırlanarak örtülmez: işlem ekranları durdurulur, kurtarma ekranı açılır. Kullanıcı yedek yükleyebilir veya açık onayla yeni deneme hesabı oluşturabilir. Okunamayan dosya bu işlem sırasında ayrıca korunur.
-
-Dışa aktarılan yedek hesabın tamamını içerir ve şifreli değildir. Yedek bir dosyadır; otomatik bulut eşitlemesi yoktur. Uygulama silinirse cihazdaki hesap ve yerel yedekler silinebilir. Ayarlar → Yedeği dışa aktar ile uygulama dışında kopya saklanabilir.
-
-## Deneme hesabının sınırları
-
-Başlangıçtaki 100.000 TL ve hisse pozisyonları sanaldır. Grafikler gerçek fiyat geçmişi göstermez. Alış limiti örnek son fiyata eşit/yüksekse, satış limiti eşit/düşükse emir örnek fiyattan tamamen gerçekleşir. Diğer emirler iptal edilene kadar bekler; fiyat akışı olmadığından kendiliğinden gerçekleşmez.
-
-Komisyon, vergi, kısmi gerçekleşme, seans/takas ve kurumsal işlemler modellenmez. Hesap motoru gerçek aracı kurum muhasebesi yerine kullanılamaz. Canlı kullanım için seçilen veri sağlayıcısı ve aracı kurumun resmi API sözleşmeleriyle ayrı entegrasyon gerekir. `LiveBrokerGateway` yalnızca bu sınırı tanımlar; `UnconfiguredBroker` gerçek emir isteklerini reddeder.
-
-## Geliştirme ve doğrulama
-
-```sh
-bun run check        # Script testleri + Swift testleri + simülatör derlemesi
-bun run test:scripts # Yalnızca kurulum/dağıtım scriptleri
-swift test           # Muhasebe, kayıt, yedek ve arama testleri
-```
-
-`Borsa.xcodeproj` → `Borsa` scheme → Product → Test, seçili simülatör veya iPhone üzerindeki UI akışlarını çalıştırır. `check`, UI testi veya fiziksel cihaz kurulumu yapmaz. Ayrıntılı sonuçlar ve kanıt dosyaları `VALIDATION.md` içindedir.
-
-UI testleri **ayrı bir hesap dizini ve UserDefaults alanı** kullanır. `--ui-testing` bu alanı seçer, `--reset-test-state` yalnızca test hesabını sıfırlar. Bu yardımcılar sadece Debug derlemesinde etkindir. Normal kullanıcının hesabı testler tarafından sıfırlanmaz.
-
-Kod: `BorsaApp/` ekranlar; `Sources/BorsaCore/Trading.swift` muhasebe; `Persistence.swift` doğrulama/kalıcılık/arama; `Market.swift` örnek fiyatlar. `Tests/` çekirdek ve dağıtım testlerini, `UITests/` uçtan uca ekran akışlarını içerir. Uygulama simgesi `swift scripts/generate-icon.swift` ile yeniden üretilebilir.
+`check` fiziksel cihaza bağlanmaz veya kurulum yapmaz. HTTPS entegrasyon testleri yalnızca `127.0.0.1` üzerinde geçici sertifika ve ayrı SQLite hesabı kullanır. `Tests/Fixtures` fiyatları sadece test içindir; üretim servisine yüklenmez. UI testlerinin eski deneme hesabı da normal hesaptan ayrıdır.

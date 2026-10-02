@@ -1,43 +1,34 @@
-# Çalışmaya devam notu · 2 Ekim 2026
+# Çalışma durumu · 3 Ekim 2026
 
-Kullanıcının son talimatı: **“cihaz testlerini bitir ve dur. kaldığın yeri not al”**. Devam eden fiziksel cihaz testi tamamlandı; geliştirme bu noktada durduruldu. Kullanıcı devam istemeden kalan işleri yürütme.
+Son talimat: **“cihaza bağlanmadan kalan işleri bitir”**. Önceki durdurma notundaki cihaz gerektirmeyen kod, hata giderme, test ve belgeleme işleri tamamlandı. Bu turda telefon sorgusu, bağlantısı, kurulumu veya UI testi yapılmadı. Cihaz işlemlerine yeni kullanıcı yönlendirmesi olmadan geçme.
 
-## Cihazda doğrulanan durum
+## Tamamlananlar
 
-- iPhone 16 Pro, iOS 27.0, cihaz `00008140-000E60E20EC0801C`.
-- `dev.prototype.borsa` sürüm **0.3.0 (4)** kurulu; cihaz uygulama sorgusuyla doğrulandı.
-- **9 UI testi geçti, 0 hata, 0 atlanan test**, `runtimeWarnings: []`.
-- 7 test eski hesabın alış/satış, kayıt, kurtarma, arama, tema, erişilebilirlik ve iptal akışlarını ayrı test hesabında kontrol ediyor.
-- 2 yeni test gerçek veri ekranlarının **sunucu eşleşmesi olmayan durumunu** kontrol ediyor: dört sekme, örnek fiyat gösterilmemesi, bağlantı ayarları ve geçersiz/boş kodla eşleşmenin kapalı olması.
-- Bu sonuç, gerçek fiyatla emir gerçekleşmesinin veya APNs bildiriminin fiziksel cihazda doğrulandığı anlamına gelmez.
-- Testlerden sonra uygulama test parametreleri olmadan açıldı. Görüntü incelendi: yeni Özet ekranı, “Gerçek veriye bağlan”, dört yeni sekme; örnek fiyat yok. Telefon sunucuyla henüz eşleştirilmedi.
-- Normal eski hesabın dosyası bu turda cihazdan tekrar alınarak bayt düzeyinde karşılaştırılmadı. Önceki 0.2.1 karşılaştırmasının kanıtı ayrı duruyor.
+- Ayrıntısız duran Bun test çalıştırması düzeltildi. `scripts/test-server.mjs` test dosyalarını açıkça seçiyor; `bun run test:server` ve `bun run check` aynı yolu kullanıyor.
+- Ortak HTTPS istemcisi `Sources/BorsaCore/PaperAPI.swift` altına alındı. Mac'te gerçek Bun HTTPS sunucusuyla eşleşme, API/Swift veri uyumu, yanlış sertifika ve yönlendirme reddi test edildi.
+- Apple istemcisinin reddettiği yerel sertifika düzeltildi: SAN, `serverAuth`, anahtar kullanımı, RSA/SHA-256. Sertifika/pin doğrulaması devre dışı bırakılmadı. Eski yerel sertifika yedeklendi, yeni parmak izi `Config/Server.local.xcconfig` içine yazıldı.
+- APNs yapılandırılması, gönderim kabulü ve hata durumları ayrıldı. Hatalar görünür; başarısız teslimler tekrar denenir, yinelenen teslim yapılmaz, kuyruk 10 incelemeden sonra da ilerler. Bildirim işi yavaşladığında fiyat döngüsü beklemez.
+- Bildirim belirli karar ekranını hedefler. Bildirim izni reddedilmişse düğme iOS Ayarlar'a gider. Cihaz kaydı hataları kullanıcıya gösterilir. Bu UI değişikliklerinin fiziksel testi yapılmadı.
+- Emir iptalinde kalan miktar için onay var. Portföy tutarları bakiye gizleme tercihini izliyor. Kaynak/paket değişirse bekleyen emir yeni kaynakla sessizce gerçekleşmiyor.
+- Lisanslı köprü fiyatla birlikte şirket haberlerini alabiliyor. Türkçe yön/olumsuzlama, hatalı/gelecek tarihli haberler ve yinelenen kısmi işlem muhasebesi için testler eklendi.
+- README, dağıtım rehberi, kabul planı ve doğrulama kaydı güncellendi. Yeni `docs/SERVER.md` ve `docs/DATA_SERVICES.md` yazıldı. Ücretli abonelik veya sağlayıcıya mesaj gönderimi yapılmadı.
 
-Kanıtlar:
+## Son doğrulama
 
-- `build/physical-paper-tests.log`
-- `build/PhysicalPaperUITests.xcresult`
-- `build/physical-paper-summary.json`
-- `build/paper-device-app.json`
-- `build/paper-device-launch.json`
-- `outputs/Borsa-iPhone16Pro-0.3.0.png`
+`bun run check` çıkış kodu **0**: **12 script + 49 sunucu + 38 Swift = 99 test**, ardından imzasız genel iOS Simulator derlemesi geçti. Fiziksel cihaz veya simülatör UI testi içermez. Kayıt `build/check-oct03.log`; ayrıntılar [VALIDATION.md](../VALIDATION.md).
 
-## Yazılmış kod
+Dört Swift HTTPS testi yalnızca `127.0.0.1` üzerinde geçici sertifika ve ayrı test hesabı kullanır. Üretim hesabına örnek fiyat veya haber yazılmaz. `Tests/Fixtures/https-server.mjs` yalnızca test ortamı işaretiyle açılır.
 
-- `server/domain.mjs`: ayrı 100.000 sanal TL / 10.000 sanal USD, tam sayı para hesabı, alış/satış kotasyonu, kayma, kümülatif komisyon, kısmi gerçekleşme, nakit/adet rezervasyonu, iptal, 15 dakika emir süresi, pozisyon/sektör/günlük kayıp/emir sıklığı sınırları. Emir ancak oluşturulmasından sonraki güncel kotasyonla doluyor. Tekrarlanan istek aynı emri döndürüyor.
-- `server/storage.mjs`: Bun SQLite, WAL ve atomik işlem; kalıcı hesap, hash olarak tutulan erişim tokenları, cihaz/bildirim kayıtları. Bozuk hesap sessizce sıfırlanmıyor.
-- `server/providers.mjs`: Alpaca IEX/SIP fiyat ve clock bağlantıları, ayrı Alpaca haber bağlantısı, Twelve Data BIST gün sonu, lisanslı sağlayıcı için sürümlü HTTPS köprü sözleşmesi, ücretsiz Fed ve TCMB RSS/Atom. Gecikmeli/gün sonu veriyle gün içi gerçekleşme kapalı. Sağlayıcı kesintisi kotasyonların işlem iznini kapatıyor.
-- `server/analysis.mjs`: kaynaklı ve açıkça kural temelli şirket/sektör/portföy değerlendirmesi; çelişkili, eski veya belirsiz haberlerde otomatik işlem yok. Haber başlığının şirketi doğrudan özne olarak taşıması ve fiyat yönü gibi ek koşullar var. İnceleme süresi dolunca emir yok. İşlem önizlemesi 30 saniye geçerli; fiyat/masraf değişirse tekrar onay gerekiyor.
-- `server/http.mjs`: HTTPS sunucusu için kimlik doğrulamalı API, tek kullanımlık eşleşme, bounded JSON, inceleme önizlemesi/onayı, ayarlar, takip listesi ve yedek dışa aktarımı.
-- `server/notifications.mjs`: APNs ES256/HTTP2 gönderimi, karar bağlantısı, süre ve teslim tekilleştirmesi. APNs anahtarı henüz yok.
-- `BorsaApp/PaperStore.swift`, `PaperViews.swift`, `PaperSettings.swift`, `Sources/BorsaCore/PaperModels.swift`: yeni Özet/Piyasalar/Portföy/Asistan ekranları; HTTPS sertifika pinleme, Keychain, çevrimdışı kayıt, kaynak/saat/gecikme, emir/inceleme önizlemesi, risk ayarları ve bildirim izni.
-- Normal kök ekran `PaperRootView`; eski örnek fiyatlı ekranlar yalnızca Debug `--ui-testing` yolunda. Eski hesap yeni performansa eklenmiyor; eski hesap dışa aktarılabiliyor.
-- `scripts/server.mjs`: setup/pair/status. `scripts/service.mjs`: macOS kullanıcı servisi install/status/restart/uninstall. Bun komutları `package.json` içinde.
-- `Config/Server.local.xcconfig` yalnızca yerel sunucu adı ve açık sertifika parmak izi içeriyor; gizli anahtar uygulamaya gömülmüyor. `.env.server`, `.borsa-server/` ve yerel config Git dışında.
+Canlı Mac sunucusunda doğrulananlar:
 
-## Çalışan yerel servis
+- Sertifika denetimi açık HTTPS; sağlık 200, kimliksiz durum 401, kimlikli durum 200.
+- Doğrulama anında 42 gerçek haber: 20 TCMB + 22 Fed. Fiyat adedi 0.
+- Hesap `review` modunda; 100.000 sanal TL / 10.000 sanal USD, sıfır pozisyon/emir. Servis açılışı ve yeniden başlatmada bakiyeler, pozisyon/emirler, ayarlar ve takip listesi korunuyor.
+- Kontrol için oluşturulan geçici erişim silindi. Kanıt `build/live-server-oct03.json`; finansal içerik veya anahtarlar rapora dökülmedi.
 
-`dev.prototype.borsa.server` LaunchAgent kuruldu ve `running` durumu görüldü. Kullanıcı oturumu açılınca başlar. Geçici terminal sunucusu kapatılıp bu servise geçildi. Haber sunucusu bu durdurma anında çalışmaya bırakıldı; geliştirme durdu.
+## Yerel servis
+
+Önceden mevcut `~/Library/LaunchAgents/dev.prototype.borsa.server.plist` bu oturumda yüklü değildi. Aynı kayıt yeniden yüklendi; ardından normal `server:service:restart` komutu geçti. Durum `running`; geliştirme bitince servis çalışmaya bırakıldı.
 
 ```sh
 bun run server:service:status
@@ -45,49 +36,33 @@ bun run server:service:restart
 bun run server:service:uninstall
 ```
 
-Son komut otomatik başlangıcı kaldırır; hesap dosyalarını silmez. Mac uyurken/kapalıyken sürekli çalışma garantisi yoktur. LAN dışı erişim kurulmadı.
+Son komut otomatik başlangıcı kaldırır, hesabı silmez. Kullanıcı oturumunda çalışır; Mac uyurken/kapalıyken sürekli izleme garantisi yoktur. Tam yeniden başlatma/uyku dönüşü testi yapılmadı.
 
-- Adres: `https://Alper-MacBook-Air.local:8787`.
-- Sertifika, SQLite, bağlantı bilgisi ve günlükler: `.borsa-server/`.
-- `server:setup` çalıştırıldı; `.env.server` boş sağlayıcı anahtarlarıyla oluşturuldu.
-- Canlı HTTP erişiminde **TCMB'den 20 ve Fed'den 20 gerçek duyuru** alındı; fiyat adedi **0**. Bu haberler SQLite'a yazıldı.
-- Fiyat servisi hesabı yok. Kullanıcı “ücretsiz başlangıç ve ücretli bağlantıları hazırla” dedi; anahtar istemek veya ücretli abonelik satın almak bu aşamanın ön koşulu değil.
-- Hesap varsayılanı `review`; fiyat olmadığı için sanal emir yok.
-- Sağlayıcı veya APNs anahtarı hiçbir nota/loga eklenmedi.
+Adres `https://Alper-MacBook-Air.local:8787`. Hesap `.borsa-server/account.sqlite`; sertifika, bağlantı bilgisi ve günlükler `.borsa-server/` içinde. `.env.server` sağlayıcı anahtarları henüz boş olan yerel dosyadır. Bu dosyalar ve `Config/Server.local.xcconfig` Git dışındadır. LAN dışı erişim kurulmadı.
 
-## Son kontrollerin kapsamı ve açık sorun
+## Cihazın son bilinen durumu
 
-Ara sürümde `bun run check` geçti: **12 script + 39 sunucu + 31 Swift testi ve imzasız simülatör derlemesi**. Kayıt: `build/paper-quality-check.log`.
+2 Ekim'de iPhone 16 Pro / iOS 27.0 üzerinde **0.3.0 (4)** doğrulandı: 9 UI testi geçti. Yedi test eski deneme hesabını, iki test yeni eşleşmemiş ekranları kapsıyordu. Telefon sunucuyla eşleşmedi. Bu bilgi geçmiş kanıttır; cihaz bu turda tekrar sorgulanmadı.
 
-Bu geçişten SONRA ek değişiklikler yapıldı:
+Kanıtlar `build/physical-paper-tests.log`, `build/PhysicalPaperUITests.xcresult`, `build/physical-paper-summary.json`, `outputs/Borsa-iPhone16Pro-0.3.0.png` içinde. Önceki 0.2.1 normal hesap dosyası korunumu kanıtı ayrıca saklanıyor.
 
-1. `PaperModels.swift` Swift paketinin altına taşındı; `PaperModelTests.swift` içinde 3 test eklendi. Yeni Swift testleri henüz çalıştırılmadı. Taşınan modeller fiziksel iOS derlemesinde derlendi.
-2. Sunucuya 2 ek analiz testi, daha sıkı muhasebe doğrulaması, başlık öznesi/olumsuzlama kontrolleri eklendi. Güncel sunucu test çalıştırması **başarılı değil**: `bun test Tests/Server` ilk test dosyasının adını yazıp, hata ayrıntısı olmadan çıkış kodu 1 veriyor. Sandbox dışında da aynı. Sebebi henüz araştırılmadı. `bun -e` ile domain yükleme/ilk state doğrulaması çalıştı; ayrı minimal Bun testi geçti. `build/server-tests.log` bu SON başarısız denemeyi içerir. Önceki 39 başarılı testin kaydı `build/paper-quality-check.log` içinde.
-3. `PaperStore.swift` içine APNs açıkken aynı inceleme için yerel bildirimi tekrarlamama koşulu eklendi. Bu küçük değişiklik fiziksel test derlemesi başladıktan sonra yazıldı; telefondaki test edilmiş binary bu son koşulu içermiyor. Son kaynak ağacı için yeni build yapılmalı.
-4. LaunchAgent başlangıcı görüldü; reboot/uyku dönüşü ve uzun süre çalışma henüz test edilmedi.
+**Yeni kod ve sertifika parmak izi telefona yüklenmedi.** Sonraki cihaz çalışmasına izin verildiğinde güncel sürüm yeniden derlenmeli; yeni pin ile `server:pair` eşleşmesi, bağlı ekranlar, çevrimdışı dönüş, onay/red ve bildirimden karara geçiş sınanmalı. `bun run mobile:ios:install` aynı bundle ID ile yükseltir; telefonu silmez. Yalnızca eski kurulu sürümün çalışması yeni kodun kanıtı değildir.
 
-Güncel ağacın tamamı geçti veya beş hedef uçtan uca çalışıyor denmemeli. Fiziksel 9 test geçti; yukarıdaki kapsam sınırları geçerli.
+## Etkinleştirme için açık girdiler
 
-## Kullanıcı devam istediğinde sıradaki işler
+1. **Fiyat hesabı:** Ücretsiz ABD başlangıcı için Alpaca hesabı/anahtarı; BIST gün içi için yetkili API ve lisans gerekir. Twelve Data Grow yalnızca BIST gün sonu gösterimidir. Anahtarlar sohbete veya Git'e değil, yerel `.env.server` dosyasına yazılır.
+2. **Sağlayıcı denemesi:** Lisanslı köprü ortak şeması hazır; Matriks'in gerçek dokümanı/hesabı olmadan doğrudan entegrasyonu doğrulanmış sayma. Yetki, gecikme, miktar, kota, gerçek seans ve kesinti dönüşü erişim açılınca ölçülür.
+3. **Apple bildirimleri:** APNs anahtarı, konu/ortam ve cihaz izni gerekir. Otomatik testte Apple göndericisi taklit edildi; canlı kapalı uygulama teslimi yapılmadı.
+4. **Cihaz kabulü:** Kullanıcı izin verince yapılır; mevcut “cihaza bağlanmadan” sınırını koru.
 
-1. Ayrıntı vermeden duran güncel Bun testlerini teşhis et; tüm sunucu testlerini, yeni Swift testlerini ve `bun run check` komutunu son kaynaklarla geçir. Emrin likidite, para/adet rezervi, kısmi komisyon ve muhasebe korunumu testlerini zayıflatma.
-2. Telefonu sunucuyla eşleştir (`bun run server:pair`, Ayarlar'daki 6 haneli kod). Debug'da `--pair-code` açılış argümanı da destekleniyor; kodu kalıcı log veya belgeye yazma. Yerel ağ izni gerekebilir. HTTPS/pinleme, 40 gerçek haber, boş fiyat durumları, çevrimdışı dönüş ve gerçek API snapshot'ının Swift modellerine decode edilmesini cihazda kontrol et.
-3. Son kaynakları cihazda yeniden derle/kur; yeni bağlantı ve inceleme akışlarını doğrula. Mevcut 9 testin kanıtını koru.
-4. Bildirim durumunu iyileştir: APNs anahtarı olmasını başarılı teslim gibi gösterme; gönderim hatalarını sağlık ekranına aktar. APNs canlı teslimi için Apple anahtarı/cihaz izni gerekiyor, mevcut koşullarda doğrulanmış sayma.
-5. `README.md`, `VALIDATION.md`, `docs/AUTOMATION_PLAN.md` mevcut eski durumları anlatıyor; güncel gerçek kapsamla düzenle. `docs/SERVER.md` ve ücretli veri rehberi henüz yazılmadı. Hizmet ayarları, güvenli eşleşme, masraf/seans/likidite varsayımları, ücretsiz/ücretli seçenekler ve dış bağımlılıkları belgele.
-6. Planın daha geniş hedeflerinden bölünme/temettü, tek hisse işlem durdurma akışı, takas, karşılaştırma endeksi ve LLM analizi henüz yok. Mevcut çalışma başlık/özet kurallarıyla değerlendirme yapıyor; bu sınırları açık tut. Lisanslı BIST köprüsü, sağlayıcı dokümanı doğrulanmış doğrudan Matriks entegrasyonu değildir.
-7. Son diff/format/kod incelemesini tamamla; tüm yeni dosyalar şu anda commit edilmemiş. Bu durdurma sırasında commit/push yapılmadı.
+Bu girdiler olmadan fiyatları, haber kapsamını veya başarılı bildirim teslimini uydurma. Ücretsiz gerçek makro haber akışı çalışıyor; fiyat olmadığında otomatik sanal emir yok.
 
-## Ücretli veri araştırmasının korunacak bulguları
+## Ücretli veri çalışması
 
-2 Ekim 2026'daki resmî kaynak kontrolü (satın alma yapılmadı):
+3 Ekim resmî kaynakları ve bağlantılar [DATA_SERVICES.md](DATA_SERVICES.md) içinde: Alpaca Basic ücretsiz IEX; SIP planı 99 USD/ay; Twelve Data Grow kredi katmanları 29/49/79 USD/ay; Matriks için kapsam/lisans teklifi gerekiyor. Eski “Grow 79 USD” notu tek başlangıç fiyatı olarak kullanılmamalı. Vergi, haber ve borsa lisansı dahil varsayılmaz; satın alma öncesi güncel paket teyit edilir.
 
-- [Alpaca planları](https://docs.alpaca.markets/us/v1.1/docs/about-market-data-api): Basic ücretsiz IEX; Algo Trader Plus 99 USD/ay SIP. IEX tüm ABD borsalarının birleşik kapsamı değil. Haber yetkisi ayrıca doğrulanacak.
-- [Alpaca snapshot API](https://docs.alpaca.markets/us/reference/stocksnapshots-1), [haber API](https://docs.alpaca.markets/us/reference/news-3), [clock API](https://docs.alpaca.markets/us/reference/legacyclock).
-- [Alpaca kotasyon miktarı değişikliği](https://docs.alpaca.markets/us/v1.1/changelog/marketdata-bid-and-ask-size-display-change): 3 Kasım 2025 sonrası miktarlar hisse adedi; 100 ile çarpılmıyor.
-- [Twelve Data Grow fiyat duyurusu](https://twelvedata.com/news/march-2026-updates): 79 USD/ay; [XIST kapsamı](https://twelvedata.com/exchanges/XIST) gün sonu, gün içi otomatik işlem için yeterli değil.
-- [Matriks API açıklaması](https://www.matriksdata.com/website/egitim/sikca-sorulan-sorular/veri-ve-icerik-saglayici-servisler-sss): bireysel API mümkün, kapsam/lisans için teklif gerekiyor; kesin fiyat veya çalışan hesap yok.
-- [BIST veri kullanım koşulları](https://www.borsaistanbul.com/sss/veri-dagitim-ve-endeks-lisanslama), [KAP REST erişimi](https://www.kap.org.tr/tr/api/about/content-file/8a019492945fbe080194b26d8bed4873).
-- Ücretsiz resmî haberler: [Fed RSS](https://www.federalreserve.gov/feeds/feeds.htm), [TCMB RSS](https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB%2BTR/Bottom%2BMenu/Diger/RSS).
+## Kapsam sınırı ve Git
 
-Fiyat ve paketler yeniden devam edilirken değişmiş olabilir; satın alma öncesi güncel resmî kapsam kontrol edilmeli.
+Haber analizi dar Türkçe/İngilizce başlık/özet kurallarıdır; LLM değildir. Bölünme/temettü, vergi/takas, ayrı hisse durdurma olayları, karşılaştırma endeksi, SEC/KAP doğrudan bağlantıları ve tam dünya gündemi sonraki kapsamdır. Bu sürüm uzun vadeli gerçek toplam getiri eşdeğerliği iddia etmez. Yeni sunucu yedeği dışa aktarılabilir; geri yükleme UI'si yoktur. Beş hedefin karşılığı ve sınırları [AUTOMATION_PLAN.md](AUTOMATION_PLAN.md) içinde.
+
+Başlangıç commit'i `c479c9f feat(paper): add server-backed paper trading experience`, dal `main`. Önceki iş kullanıcı tarafından commit edilmişti. Bu turdaki değişiklikler çalışma ağacında; commit/push yapılmadı. API anahtarı, yerel hesap, sertifika veya erişim tokenını Git'e ekleme.

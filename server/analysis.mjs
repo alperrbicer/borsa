@@ -1,11 +1,11 @@
 import { instrument, freshQuote, quoteBlock, equity, availableShares, reservedCash, placeOrder, fee, hash, requireValue } from './domain.mjs'
-const POSITIVE = /raises? (?:its |full.year )?(?:guidance|outlook)|raised (?:its )?(?:guidance|outlook)|record (?:revenue|profit)|kar beklentisini yükselt|kâr beklentisini yükselt/i
-const NEGATIVE = /cuts? (?:its |full.year )?(?:guidance|outlook)|lowers? (?:its )?(?:guidance|outlook)|files? for bankruptcy|earnings miss|kar beklentisini düşür|kâr beklentisini düşür/i
-const UNCERTAIN = /rumou?r|unconfirmed|may |might |could |denies|\bnot\b|\bno\b|analysts? |söylenti|iddia|yalanla|bekleniyor|beklentisi/i
+const POSITIVE = /raises? (?:its |full.year )?(?:guidance|outlook)|raised (?:its )?(?:guidance|outlook)|record (?:revenue|profit)|k[aâ]r beklentisini (?:yükseltti|yükseltiyor)/i
+const NEGATIVE = /cuts? (?:its |full.year )?(?:guidance|outlook)|lowers? (?:its )?(?:guidance|outlook)|files? for bankruptcy|earnings miss|k[aâ]r beklentisini (?:düşürdü|düşürüyor)/i
+const UNCERTAIN = /rumou?r|unconfirmed|may |might |could |denies|\bnot\b|\bno\b|analysts? |analist|söylenti|iddia|yalanla|bekleniyor|beklentisi(?:\s|$)|değil|yükseltmedi|düşürmedi/i
 export function addNews(state, rows, now=Date.now()) {
   for (const row of rows) {
-    if (!row.id || !row.title || !row.source || !/^https:\/\//.test(row.url) || !Number.isFinite(row.publishedAt) || row.publishedAt>now+60_000) continue
-    const item={...row,receivedAt:now,title:row.title.slice(0,500),summary:(row.summary??'').slice(0,1200),symbols:(row.symbols??[]).filter(x=>instrument(x)),delaySeconds:Math.max(0,Math.round((now-row.publishedAt)/1000))}
+    if (!row || typeof row!=='object' || typeof row.id!=='string' || !row.id || typeof row.title!=='string' || !row.title || typeof row.source!=='string' || !row.source || typeof row.url!=='string' || !/^https:\/\//.test(row.url) || !Number.isFinite(row.publishedAt) || row.publishedAt<=0 || row.publishedAt>now+2000) continue
+    const item={...row,receivedAt:now,title:row.title.slice(0,500),summary:String(row.summary??'').slice(0,1200),symbols:(Array.isArray(row.symbols)?row.symbols:[]).filter(x=>instrument(x)),delaySeconds:Math.max(0,Math.round((now-row.publishedAt)/1000))}
     const old=state.news.find(x=>x.id===row.id || x.url===row.url)
     // A decision retains the exact text it evaluated; revisions cannot rewrite its evidence.
     if (old) continue
@@ -26,7 +26,7 @@ export function analyze(state, news, symbol, now=Date.now()) {
   const recent=now-news.publishedAt<30*60_000 && now-news.receivedAt<5*60_000
   const reliable=news.sourceTier==='official' || news.sourceTier==='licensed'
   const escaped=item.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')
-  const subject=new RegExp(`^(?:${escaped}|${symbol})(?: Inc[.,]?)?[:\\s]+(?:reports? |announces? )?(?:raises? (?:its )?(?:guidance|outlook)|cuts? (?:its )?(?:guidance|outlook)|record (?:profit|revenue)|files? for bankruptcy)`,'i').test(news.title)
+  const subject=new RegExp(`^(?:${escaped}|${symbol})(?: Inc[.,]?)?[:\\s]+(?:reports? |announces? )?(?:raises? (?:its )?(?:guidance|outlook)|cuts? (?:its )?(?:guidance|outlook)|record (?:profit|revenue)|files? for bankruptcy|k[aâ]r beklentisini (?:yükseltti|yükseltiyor|düşürdü|düşürüyor))`,'i').test(news.title)
   const confidence=proposedSide && subject && aligned && recent && reliable && quote ? 'high' : 'review'
   const companyImpact=uncertain?'Haberin dili veya iddiası belirsiz; yön doğrulanamadı.':direct ? positive!==negative ? positive?'Başlık/özette olumlu beklenti sinyali var.':'Başlık/özette olumsuz beklenti sinyali var.' : 'Şirket yönü metinden güvenle çıkarılamıyor.' : 'Makro gelişmenin şirkete doğrudan etkisi doğrulanmadı.'
   const sectorImpact=`${item.sector}: ${direct?'Tek şirket haberi sektörün tamamına genellenmez.':'Faiz, talep ve maliyet etkileri birlikte incelenmeli.'}`

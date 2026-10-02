@@ -21,7 +21,7 @@
     "server:start": "bun server/main.mjs",
     "server:pair": "bun scripts/server.mjs pair",
     "server:status": "bun scripts/server.mjs status",
-    "test:server": "bun test Tests/Server",
+    "test:server": "node scripts/test-server.mjs",
     "server:service:install": "bun scripts/service.mjs install",
     "server:service:status": "bun scripts/service.mjs status",
     "server:service:restart": "bun scripts/service.mjs restart",

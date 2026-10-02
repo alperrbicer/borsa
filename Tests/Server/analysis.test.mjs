@@ -60,6 +60,12 @@ test('negated, third-party and cross-company headlines require review',()=>{
     const s=setup('auto');addNews(s,[news({title,summary:''})],NOW);evaluateNews(s,NOW);expect(s.orders).toHaveLength(0)
   }
 })
+test('Turkish denials and future-dated stories do not become automatic signals',()=>{
+  for(const title of ['AAPL kâr beklentisini yükseltmedi','AAPL kâr beklentisini yükseltti iddiası yalanlandı']){
+    const s=setup('auto');addNews(s,[news({title,summary:''})],NOW);evaluateNews(s,NOW);expect(s.orders).toHaveLength(0)
+  }
+  const s=setup('auto');addNews(s,[news({publishedAt:NOW+5000})],NOW);evaluateNews(s,NOW);expect(s.news).toHaveLength(0)
+})
 test('stopping automation cancels its pending orders and closes their decisions',()=>{
   const s=setup('auto');addNews(s,[news()],NOW);evaluateNews(s,NOW);changeSettings(s,{mode:'paused'})
   expect(s.orders[0].status).toBe('cancelled');expect(s.decisions[0].state).toBe('closed')

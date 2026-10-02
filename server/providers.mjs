@@ -32,7 +32,7 @@ export function parseRSS(xml, {source,market,url}, now=Date.now()) {
   }).filter(x=>x.title&&/^https:\/\//.test(x.url)&&Number.isFinite(x.publishedAt))
 }
 export function normalizeLicensed(envelope, now=Date.now()) {
-  requireValue(envelope?.version===1 && typeof envelope.source==='string' && Array.isArray(envelope.quotes),'Lisanslı akış sözleşmesi geçersiz.')
+  requireValue(envelope?.version===1 && typeof envelope.source==='string' && envelope.source.trim().length>0 && envelope.source.length<=200 && Array.isArray(envelope.quotes) && envelope.quotes.length>0,'Lisanslı akış sözleşmesi geçersiz.')
   return envelope.quotes.slice(0,100).map(q=>{
     requireValue(CATALOG.some(x=>x.symbol===q.symbol)&&Number.isFinite(q.timestamp)&&typeof q.sessionOpen==='boolean','Lisanslı akış zamanı/seansı geçersiz.')
     requireValue(['realtime','delayed','eod'].includes(q.quality)&&integer(q.delaySeconds,0,172800),'Lisanslı akış gecikmesi belirtilmeli.')
@@ -66,7 +66,9 @@ export class Feeds {
         await run('licensed','Lisanslı BIST akışı',async()=>{
           requireValue(new URL(e.LICENSED_FEED_URL).protocol==='https:','Lisanslı veri için HTTPS gerekli.')
           const body=await jsonURL(e.LICENSED_FEED_URL,{headers:{Authorization:'Bearer '+e.LICENSED_FEED_TOKEN}},this.fetcher)
-          updates.push(...normalizeLicensed(body,now));return 'Yetkili akış sözleşmesi v1; sağlayıcı kapsamı uygulanıyor.'
+          updates.push(...normalizeLicensed(body,now))
+          if(Array.isArray(body.news))stories.push(...body.news.slice(0,100).filter(n=>n&&typeof n==='object').map(n=>({...n,source:body.source,sourceTier:'licensed',scope:n.scope==='company'?'company':'macro',market:n.market==='US'?'US':'BIST'})))
+          return 'Yetkili fiyat/haber akışı sözleşmesi v1; sağlayıcı kapsamı uygulanıyor.'
         })
       } else health.push({id:'licensed',name:'BIST gün içi',status:'setup',message:'Yetkili sağlayıcı API erişimi/lisansı gerekli. Matriks sözleşmesine göre bağlanır.',lastSuccessAt:null})
       if(e.TWELVE_DATA_KEY && now-this.lastBIST>60*60_000) {
@@ -95,7 +97,7 @@ export class Feeds {
       }
       if(!e.ALPACA_KEY_ID||!e.ALPACA_SECRET_KEY) health.push({id:'alpaca-news',name:'Şirket haberleri',status:'setup',message:'Alpaca hesabının haber yetkisi gerekli; ücretsiz resmî makro haberler ayrı akıyor.',lastSuccessAt:null})
       repository.update(state=>{
-        for(const q of updates) {try{acceptQuote(state,q,now)}catch{if(state.quotes[q.symbol])state.quotes[q.symbol].sessionOpen=false;health.push({id:'invalid-'+q.symbol,name:q.symbol,status:'error',message:'Geçersiz sağlayıcı verisi reddedildi.',lastSuccessAt:null})}}
+        for(const q of updates) {try{acceptQuote(state,q,now);state.health=state.health.filter(x=>x.id!=='invalid-'+q.symbol)}catch{if(state.quotes[q.symbol])state.quotes[q.symbol].sessionOpen=false;health.push({id:'invalid-'+q.symbol,name:q.symbol,status:'error',message:'Geçersiz sağlayıcı verisi reddedildi.',lastSuccessAt:null})}}
         for(const h of health.filter(x=>x.status!=='connected'))for(const q of Object.values(state.quotes))if(q.providerId===h.id)q.sessionOpen=false
         for(const item of health) {const old=state.health.find(x=>x.id===item.id);if(old){const previous=old.lastSuccessAt;Object.assign(old,item);if(!item.lastSuccessAt)old.lastSuccessAt=previous}else state.health.push(item)}
         addNews(state,stories,now);evaluateNews(state,now);state.lastCycleAt=now

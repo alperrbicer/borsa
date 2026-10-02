@@ -1,10 +1,8 @@
 import SwiftUI
 import Combine
 import Security
-import CryptoKit
 import UserNotifications
 
-struct ServerConnection: Codable, Sendable { let url: String, pin: String, token: String }
 private enum ConnectionVault {
     static let service = "dev.prototype.borsa.server"
     static func read() -> ServerConnection? {
@@ -24,49 +22,6 @@ private enum ConnectionVault {
         guard status == errSecSuccess else { throw PaperClientError.message("Bağlantı bilgisi güncellenemedi.") }
     }
 }
-enum PaperClientError: Error, LocalizedError {
-    case message(String)
-    var errorDescription: String? { switch self { case .message(let message): message } }
-}
-private final class PinnedSession: NSObject, URLSessionDelegate, @unchecked Sendable {
-    let pin: String
-    init(pin: String) { self.pin = pin.lowercased().replacingOccurrences(of: ":", with: "") }
-    func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-        guard !pin.isEmpty else { completionHandler(.performDefaultHandling,nil); return }
-        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-              let trust = challenge.protectionSpace.serverTrust,
-              let certificates = SecTrustCopyCertificateChain(trust) as? [SecCertificate], let certificate = certificates.first else { completionHandler(.cancelAuthenticationChallenge,nil); return }
-        let data = SecCertificateCopyData(certificate) as Data
-        let actual = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        guard actual == pin else { completionHandler(.cancelAuthenticationChallenge,nil); return }
-        SecTrustSetAnchorCertificates(trust, [certificate] as CFArray)
-        SecTrustSetAnchorCertificatesOnly(trust, true)
-        guard SecTrustEvaluateWithError(trust,nil) else { completionHandler(.cancelAuthenticationChallenge,nil); return }
-        completionHandler(.useCredential, URLCredential(trust: trust))
-    }
-    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) { completionHandler(nil) }
-}
-private struct PaperAPI: Sendable {
-    let connection: ServerConnection
-    func data(_ path: String, method: String = "GET", body: Data? = nil, authenticate: Bool = true) async throws -> Data {
-        guard let base = URL(string: connection.url), base.scheme == "https", base.host != nil, base.user == nil, base.password == nil, base.query == nil, base.fragment == nil else { throw PaperClientError.message("Geçerli bir HTTPS sunucu adresi gir.") }
-        let delegate = PinnedSession(pin: connection.pin)
-        let config = URLSessionConfiguration.ephemeral; config.timeoutIntervalForRequest = 15; config.timeoutIntervalForResource = 20
-        let session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
-        defer { session.finishTasksAndInvalidate() }
-        var request = URLRequest(url: base.appendingPathComponent(path)); request.httpMethod = method; request.httpBody = body
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if authenticate { request.setValue("Bearer " + connection.token, forHTTPHeaderField: "Authorization") }
-        let (bytes, response) = try await session.data(for: request)
-        guard bytes.count <= 5 * 1024 * 1024 else { throw PaperClientError.message("Sunucu yanıtı çok büyük.") }
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            let error = (try? JSONDecoder().decode(APIError.self, from: bytes))?.error ?? "Sunucu isteği tamamlanamadı."
-            throw PaperClientError.message(error)
-        }
-        return bytes
-    }
-    private struct APIError: Decodable { let error: String }
-}
 @MainActor
 final class PaperStore: ObservableObject {
     @Published private(set) var snapshot: PaperSnapshot?
@@ -75,16 +30,18 @@ final class PaperStore: ObservableObject {
     @Published private(set) var busy = false
     @Published var error: String?
     @Published var selectedTab = 0
+    @Published var requestedReviewID: String?
     @Published var serverURL: String
     @Published var serverPin: String
     @Published var notificationStatus = "Bildirim izni verilmedi"
     private var connection: ServerConnection?
     private var refreshing = false
+    private var registeredToken: String?
     private var knownReviews: Set<String>
     private let cacheURL: URL
     private let testing: Bool
     var configured: Bool { connection != nil }
-    var canAct: Bool { connected && !busy && snapshot.map { Date().timeIntervalSince1970 * 1000 - $0.serverTime < 45_000 } == true }
+    var canAct: Bool { connected && !busy && snapshot.map { let age = Date().timeIntervalSince1970 * 1000 - $0.serverTime; return age >= -2000 && age < 45_000 } == true }
     init() {
         #if DEBUG
         testing = ProcessInfo.processInfo.arguments.contains("--paper-ui-testing")
@@ -113,7 +70,7 @@ final class PaperStore: ObservableObject {
             let data = try await PaperAPI(connection: candidate).data("pair", method: "POST", body: JSONSerialization.data(withJSONObject: ["code":code]), authenticate: false)
             let token = try JSONDecoder().decode(Pair.self, from: data).token
             let saved = ServerConnection(url: candidate.url,pin:candidate.pin,token:token)
-            try ConnectionVault.save(saved); connection = saved; error = nil
+            try ConnectionVault.save(saved); connection = saved; registeredToken = nil; error = nil
             await refresh()
         } catch { self.error = error.localizedDescription }
     }
@@ -123,9 +80,7 @@ final class PaperStore: ObservableObject {
         do {
             let data = try await PaperAPI(connection: connection).data("snapshot")
             try await accept(data)
-            let settings = await UNUserNotificationCenter.current().notificationSettings()
-            notificationStatus = settings.authorizationStatus == .authorized ? "Bildirim izni açık" : "Bildirim izni kapalı"
-            if settings.authorizationStatus == .authorized { UIApplication.shared.registerForRemoteNotifications() }
+            await refreshNotificationStatus()
             await registerPush()
         }
         catch { connected = false; connectionMessage = error.localizedDescription }
@@ -156,12 +111,33 @@ final class PaperStore: ObservableObject {
         catch { self.error = error.localizedDescription; return false }
     }
     func requestNotifications() async {
-        do { let allowed = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert,.sound,.badge]); notificationStatus = allowed ? "Bildirim izni açık" : "Bildirim izni kapalı"; if allowed { UIApplication.shared.registerForRemoteNotifications() } }
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        if settings.authorizationStatus == .denied, let url = URL(string:UIApplication.openSettingsURLString) { await UIApplication.shared.open(url); return }
+        do { _ = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert,.sound,.badge]); await refreshNotificationStatus() }
         catch { self.error = error.localizedDescription }
+    }
+    func refreshNotificationStatus() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        let allowed = [.authorized,.provisional,.ephemeral].contains(settings.authorizationStatus)
+        notificationStatus = allowed ? "Bildirim izni açık" : "Bildirim izni kapalı"
+        if allowed {
+            if let failure = UserDefaults.standard.string(forKey:"borsa.push.error") { notificationStatus = failure }
+            UIApplication.shared.registerForRemoteNotifications()
+        }
     }
     func registerPush() async {
         guard let connection, let token = UserDefaults.standard.string(forKey: "borsa.push.token"), !testing else { return }
-        _ = try? await PaperAPI(connection: connection).data("device", method: "POST", body: JSONSerialization.data(withJSONObject: ["token":token]))
+        let key = connection.token + token
+        guard registeredToken != key else { return }
+        do {
+            _ = try await PaperAPI(connection: connection).data("device", method: "POST", body: JSONSerialization.data(withJSONObject: ["token":token]))
+            registeredToken = key
+        } catch { notificationStatus = "Bildirim izni açık; sunucuya cihaz kaydı iletilemedi." }
+    }
+    func openPendingReview() {
+        guard !testing, let id = UserDefaults.standard.string(forKey:"borsa.paper.pendingReview") else { return }
+        UserDefaults.standard.removeObject(forKey:"borsa.paper.pendingReview")
+        requestedReviewID = id; selectedTab = 3
     }
     func backup() async throws -> Data {
         guard let connection else { throw PaperClientError.message("Sunucu bağlantısı gerekli.") }
@@ -178,10 +154,17 @@ final class PaperStore: ObservableObject {
 }
 final class BorsaAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool { UNUserNotificationCenter.current().delegate = self; return true }
-    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) { UserDefaults.standard.set(deviceToken.map { String(format: "%02x", $0) }.joined(),forKey: "borsa.push.token") }
-    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) { }
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        UserDefaults.standard.set(deviceToken.map { String(format: "%02x", $0) }.joined(),forKey: "borsa.push.token")
+        UserDefaults.standard.removeObject(forKey:"borsa.push.error")
+    }
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) { UserDefaults.standard.set("Apple bildirim kaydı alınamadı; bağlantını kontrol et.",forKey:"borsa.push.error") }
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping @Sendable (UNNotificationPresentationOptions) -> Void) { completionHandler([.banner,.sound]) }
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping @Sendable () -> Void) {
-        Task { @MainActor in NotificationCenter.default.post(name: .init("BorsaOpenReviews"),object:nil) }; completionHandler()
+        let id = response.notification.request.content.userInfo["decisionId"] as? String
+        Task { @MainActor in
+            if let id, id.count <= 80 { UserDefaults.standard.set(id,forKey:"borsa.paper.pendingReview") }
+            NotificationCenter.default.post(name: .init("BorsaOpenReviews"),object:nil)
+        }; completionHandler()
     }
 }

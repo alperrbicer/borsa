@@ -127,4 +127,25 @@ describe('paper account and execution',()=>{
     const s=account();acceptQuote(s,quote('AAPL',NOW-1000,{priceUnits:999999}),NOW)
     expect(freshQuote(s,'AAPL',NOW).priceUnits).toBe(1_000_000)
   })
+  test('pending orders stop when the source or data package changes',()=>{
+    const s=account();placeOrder(s,order(),NOW)
+    tick(s,NOW+1000,{source:'Different test feed'})
+    expect(s.orders[0].status).toBe('cancelled');expect(s.orders[0].reason).toContain('kaynağı değişti')
+    expect(s.positions).toHaveLength(0);expect(reservedCash(s,'USD')).toBe(0)
+  })
+  test('mixed partial buys and sells conserve cash and cost basis over repeated cycles',()=>{
+    const s=account();s.settings.maxDailyOrders=100
+    let now=NOW
+    for(let cycle=0;cycle<30;cycle++){
+      const quantity=cycle%3+1
+      placeOrder(s,order({quantity,limitUnits:1_040_000}),now)
+      for(let part=0;part<quantity;part++){now+=1000;tick(s,now,{askSize:1,priceUnits:1_000_001+cycle,bidUnits:1_000_001+cycle,askUnits:1_000_001+cycle})}
+      placeOrder(s,order({side:'sell',quantity,limitUnits:960_000}),now)
+      for(let part=0;part<quantity;part++){now+=1000;tick(s,now,{bidSize:1,priceUnits:1_010_011+cycle,bidUnits:1_010_011+cycle,askUnits:1_010_011+cycle})}
+      expect(s.positions).toHaveLength(0)
+      expect(s.wallets[1].cashCents).toBe(s.wallets[1].initialCashCents+s.wallets[1].realizedCents)
+    }
+    expect(s.orders.every(o=>o.status==='filled')).toBe(true)
+    expect(s.orders).toHaveLength(60)
+  })
 })

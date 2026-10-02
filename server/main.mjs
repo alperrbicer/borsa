@@ -18,15 +18,20 @@ if(import.meta.main){
   const directory=resolve(process.env.BORSA_SERVER_DATA??'.borsa-server')
   if(!existsSync(join(directory,'cert.pem')))throw new Error('Önce bun run server:setup çalıştır.')
   const repository=new Repository(join(directory,'account.sqlite')),feeds=new Feeds(),push=new PushDelivery()
-  repository.update(s=>{s.health=s.health.filter(x=>x.id!=='notifications');s.health.push({id:'notifications',name:'Telefon bildirimleri',status:push.configured?'connected':'setup',message:push.configured?'APNs gönderimi açık; cihaz izni ve kaydı gerekli.':'Uygulama içi incelemeler açık. Uygulama kapalıyken bildirim için APNs anahtarı gerekli.',lastSuccessAt:null})})
+  push.health(repository,push.configured?'ready':'setup',push.configured?'APNs ayarları var; gönderim henüz doğrulanmadı.':'Uygulama kapalıyken bildirim için APNs anahtarı gerekli.')
   const server=Bun.serve({hostname:process.env.BORSA_SERVER_HOST??'0.0.0.0',port:Number(process.env.BORSA_SERVER_PORT??8787),maxRequestBodySize:16384,
     tls:{cert:Bun.file(join(directory,'cert.pem')),key:Bun.file(join(directory,'key.pem'))},fetch:handler(repository,{pairingPath:join(directory,'pairing.json')})})
   let stopped=false
   async function cycle(){
     if(stopped)return
-    try{await feeds.cycle(repository);repository.update(s=>processOrders(s));await push.flush(repository)}catch{console.error('Veri/işlem döngüsü tamamlanamadı; hesap korunuyor.')}finally{if(!stopped)setTimeout(cycle,15000)}
+    try{await feeds.cycle(repository);repository.update(s=>processOrders(s))}catch{console.error('Veri/işlem döngüsü tamamlanamadı; hesap korunuyor.')}finally{if(!stopped)setTimeout(cycle,15000)}
+  }
+  async function notifications(){
+    if(stopped)return
+    try{await push.flush(repository)}catch{console.error('Bildirim durumu kaydedilemedi.')}finally{if(!stopped)setTimeout(notifications,15000)}
   }
   cycle()
+  notifications()
   console.log(`Borsa servisi TLS ile ${server.port} portunda çalışıyor. Eşleşme: bun run server:pair`)
   const stop=()=>{stopped=true;server.stop();setTimeout(()=>process.exit(0),100).unref()}
   process.on('SIGTERM',stop);process.on('SIGINT',stop)

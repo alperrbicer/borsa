@@ -81,7 +81,7 @@ struct PaperDecision: Codable, Identifiable, Sendable {
     let createdAt: Double, expiresAt: Double
     let proposedSide: String?, orderId: String?
     var stateTitle: String {
-        switch state { case "review": "İnceleme bekliyor"; case "queued": "Emir bekliyor"; case "executed": "Gerçekleşti"; case "rejected": "Reddedildi"; case "expired": "Yanıt gelmedi"; default: "İşlem yapılmadı" }
+        switch state { case "review": "İnceleme bekliyor"; case "queued": "Emir bekliyor"; case "executed": "Gerçekleşti"; case "rejected": "Reddedildi"; case "expired": "Yanıt gelmedi"; case "closed": "Emir kapandı"; default: "İşlem yapılmadı" }
     }
 }
 struct PaperSettings: Codable, Sendable {

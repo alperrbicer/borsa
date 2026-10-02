@@ -56,6 +56,7 @@ struct PaperSettingsView: View {
                 .toolbar {ToolbarItem(placement:.topBarTrailing) {Button("Bitti") {dismiss()}}}
                 .fileExporter(isPresented:$exporting,document:document,contentType:.json,defaultFilename:"Borsa-hesap-yedegi") {result in if case .failure(let error)=result {paper.error=error.localizedDescription}}
                 .onAppear {if let s=paper.snapshot?.settings {positionLimit=s.maxPositionPercent;dailyLoss=s.maxDailyLossPercent;commission=s.commissionBps;slippage=s.slippageBps}}
+                .task {await paper.refreshNotificationStatus()}
         }
     }
 }

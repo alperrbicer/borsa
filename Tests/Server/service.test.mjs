@@ -102,6 +102,16 @@ test('data outage immediately closes execution even if cached quotes are young',
   expect(r.read().quotes.AAPL.sessionOpen).toBe(false)
   expect(()=>r.update(s=>placeOrder(s,{id:'outage-order-123456',symbol:'AAPL',side:'buy',quantity:1,limitUnits:1_020_000},NOW+1000))).toThrow('kapalı')
 })
+test('authorized BIST bridge supports sourced Turkish company news and quotes together',async()=>{
+  const r=repo();r.update(s=>{s.settings.mode='auto'})
+  const envelope={version:1,source:'Licensed TEST fixture',quotes:[{symbol:'THYAO',currency:'TRY',priceUnits:1000000,bidUnits:1000000,askUnits:1000000,bidSize:50,askSize:50,previousCloseUnits:990000,timestamp:NOW,quality:'realtime',delaySeconds:0,sessionOpen:true}],news:[{id:'bist-test-news',title:'THYAO kâr beklentisini yükseltti',url:'https://example.test/turkish-news',publishedAt:NOW,symbols:['THYAO'],scope:'company',market:'BIST'}]}
+  const feeds=new Feeds({LICENSED_FEED_URL:'https://licensed.example.test/feed',LICENSED_FEED_TOKEN:'fixture-only'},async url=>new URL(url).hostname==='licensed.example.test'?Response.json(envelope):new Response(rss))
+  envelope.news.push(null, {id:'invalid-no-source-time'})
+  await feeds.cycle(r,NOW)
+  const s=r.read();expect(s.orders).toHaveLength(1);expect(s.orders[0].symbol).toBe('THYAO');expect(s.orders[0].side).toBe('buy')
+  expect(s.decisions.find(x=>x.newsId==='bist-test-news').source).toBe('Licensed TEST fixture')
+  expect(s.wallets[1].cashCents).toBe(1000000)
+})
 test('APNs carries a review link only, expires unanswered requests and deduplicates accepted deliveries',async()=>{
   const r=repo(),now=Date.now()
   r.update(s=>{s.decisions=[{id:'review-1',symbol:'AAPL',state:'review',expiresAt:now+60000},{id:'expired',symbol:'MSFT',state:'review',expiresAt:now-1}]})

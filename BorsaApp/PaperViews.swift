@@ -14,12 +14,13 @@ struct PaperRootView: View {
         .environmentObject(paper)
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
+            paper.openPendingReview()
             while !Task.isCancelled {
                 await paper.refresh()
                 do { try await Task.sleep(for: .seconds(15)) } catch { break }
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .init("BorsaOpenReviews"))) { _ in paper.selectedTab = 3 }
+        .onReceive(NotificationCenter.default.publisher(for: .init("BorsaOpenReviews"))) { _ in paper.openPendingReview() }
         .alert("İşlem tamamlanamadı",isPresented:Binding(get:{paper.error != nil},set:{if !$0 {paper.error = nil}})) { Button("Tamam") { paper.error = nil } } message: { Text(paper.error ?? "") }
     }
 }
@@ -165,15 +166,18 @@ struct PaperStockDetail: View {
 }
 struct PaperPortfolioView: View {
     @EnvironmentObject private var paper: PaperStore
+    @EnvironmentObject private var legacy: AppStore
+    @State private var cancelling: PaperOrder?
+    private func money(_ cents: Int64?, _ currency: String) -> String { legacy.preferences.hidesBalances ? "••••••" : PaperFormat.money(cents,currency) }
     var body: some View {
         PaperPage(title:"Portföy") {
             if let snapshot = paper.snapshot {
                 ForEach(snapshot.wallets) { wallet in
                     WalletCard(wallet:wallet)
                     Card {
-                        InfoRow(title:"Ödenen komisyon",value:PaperFormat.money(wallet.feesCents,wallet.currency))
-                        InfoRow(title:"Gerçekleşen net kâr / zarar",value:PaperFormat.money(wallet.realizedCents,wallet.currency))
-                        InfoRow(title:"Emirlere ayrılan",value:PaperFormat.money(wallet.reservedCents,wallet.currency))
+                        InfoRow(title:"Ödenen komisyon",value:money(wallet.feesCents,wallet.currency))
+                        InfoRow(title:"Gerçekleşen net kâr / zarar",value:money(wallet.realizedCents,wallet.currency))
+                        InfoRow(title:"Emirlere ayrılan",value:money(wallet.reservedCents,wallet.currency))
                         InfoRow(title:"Zirveden düşüş",value:wallet.drawdownPercent.map { String(format:"%%%.2f",$0) } ?? "—")
                     }
                 }
@@ -181,7 +185,7 @@ struct PaperPortfolioView: View {
                 SectionHeading(title:"Varlıklar")
                 if snapshot.positions.isEmpty { Text("Henüz pozisyonun yok.").foregroundStyle(.secondary) }
                 ForEach(snapshot.positions) { p in
-                    Card { Text("\(p.symbol) · \(p.quantity) adet").font(.headline); InfoRow(title:"Güncel değer",value:PaperFormat.money(p.marketValueCents,p.currency)); InfoRow(title:"Maliyet",value:PaperFormat.money(p.costCents,p.currency)); InfoRow(title:"Net açık kâr / zarar",value:PaperFormat.money(p.profitCents,p.currency)) }
+                    Card { Text("\(p.symbol) · \(p.quantity) adet").font(.headline); InfoRow(title:"Güncel değer",value:money(p.marketValueCents,p.currency)); InfoRow(title:"Maliyet",value:money(p.costCents,p.currency)); InfoRow(title:"Net açık kâr / zarar",value:money(p.profitCents,p.currency)) }
                 }
                 SectionHeading(title:"Emirler",subtitle:"Limit emirler 15 dakika geçerlidir.")
                 if snapshot.orders.isEmpty { Text("Henüz emir yok.").foregroundStyle(.secondary) }
@@ -195,11 +199,14 @@ struct PaperPortfolioView: View {
                         Text(order.reason).font(.caption).foregroundStyle(.secondary)
                         if !order.source.isEmpty { Text(order.source).font(.caption).foregroundStyle(.secondary) }
                         Text(PaperFormat.date(order.createdAt)).font(.caption).foregroundStyle(.secondary)
-                        if order.status == "pending" { Button("Emri iptal et",role:.destructive) { Task { _ = await paper.mutate("orders/\(order.id)/cancel") } }.disabled(!paper.canAct) }
+                        if order.status == "pending" { Button("Emri iptal et",role:.destructive) { cancelling = order }.disabled(!paper.canAct) }
                     }
                 }
             } else { EmptyState(title:"Hesap bağlantısı bekleniyor",message:"Sanal hesabın sunucuda saklanır. Bağlantı kurulduğunda bakiye ve emirler eşitlenir.",icon:"externaldrive") }
-        }
+        }.alert("Kalan emir iptal edilsin mi?",isPresented:Binding(get:{cancelling != nil},set:{if !$0 {cancelling=nil}}),presenting:cancelling) { order in
+            Button("Emri iptal et",role:.destructive) { Task { _ = await paper.mutate("orders/\(order.id)/cancel");cancelling=nil } }
+            Button("Vazgeç",role:.cancel) { cancelling=nil }
+        } message: { order in Text("\(order.symbol) emrinin gerçekleşmemiş kısmı iptal edilir. Gerçekleşmiş işlemler korunur.") }
     }
 }
 struct PaperAssistantView: View {
@@ -228,6 +235,8 @@ struct PaperAssistantView: View {
                     if let url = URL(string:news.url), url.scheme == "https" { Link("Kaynağı aç",destination:url).font(.subheadline) }
                 }
             }
+        }.navigationDestination(isPresented:Binding(get:{paper.requestedReviewID != nil},set:{if !$0 {paper.requestedReviewID=nil}})) {
+            if let id = paper.requestedReviewID { PaperDecisionDetail(id:id) }
         }
     }
 }
@@ -252,7 +261,7 @@ private struct PaperDecisionDetail: View {
                         Button("İşlem yapma",role:.destructive) { Task { _ = await paper.mutate("decisions/\(id)/review",values:["choice":"reject"]) } }.disabled(!paper.canAct).frame(maxWidth:.infinity,minHeight:44)
                     }
                 }.padding(20)
-            }
+            } else { EmptyState(title:"Karar kaydı bekleniyor",message:"Sunucu bağlantısı yenilendiğinde karar görünür. Çok eski kayıtlar hesap yedeğinde bulunabilir.",icon:"tray") }
         }.background(Palette.background).navigationTitle("Değerlendirme").navigationBarTitleDisplayMode(.inline)
         .sheet(item:$preview) { value in
             NavigationStack {
