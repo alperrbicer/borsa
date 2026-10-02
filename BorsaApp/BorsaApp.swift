@@ -3,9 +3,19 @@ import SwiftUI
 @main
 struct BorsaApp: App {
     @StateObject private var store = AppStore()
+    @UIApplicationDelegateAdaptor(BorsaAppDelegate.self) private var appDelegate
+    private var legacyUITest: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--ui-testing")
+        #else
+        false
+        #endif
+    }
     var body: some Scene {
         WindowGroup {
-            RootView()
+            Group {
+                if legacyUITest { RootView() } else { PaperRootView() }
+            }
                 .environmentObject(store)
                 .tint(Palette.accent)
                 .preferredColorScheme(store.preferredColorScheme)

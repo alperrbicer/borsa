@@ -117,6 +117,7 @@ function showDevices() {
 
 function suites() {
   execute(process.execPath, ['--test', join(root, 'Tests/Scripts/deployment.test.mjs')])
+  execute('bun', ['test', join(root, 'Tests/Server')])
   execute('xcrun', ['swift', 'test', '--jobs', '2'])
 }
 

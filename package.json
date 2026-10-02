@@ -2,7 +2,9 @@
   "name": "borsa-tools",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "check": "node scripts/ios.mjs check",
     "test:scripts": "node --test Tests/Scripts/deployment.test.mjs",
@@ -14,6 +16,15 @@
     "mobile:ios:archive": "node scripts/ios.mjs archive",
     "mobile:ios:export": "node scripts/ios.mjs export",
     "mobile:ios:upload": "node scripts/ios.mjs upload",
-    "mobile:ios:testflight": "node scripts/ios.mjs testflight"
+    "mobile:ios:testflight": "node scripts/ios.mjs testflight",
+    "server:setup": "bun scripts/server.mjs setup",
+    "server:start": "bun server/main.mjs",
+    "server:pair": "bun scripts/server.mjs pair",
+    "server:status": "bun scripts/server.mjs status",
+    "test:server": "bun test Tests/Server",
+    "server:service:install": "bun scripts/service.mjs install",
+    "server:service:status": "bun scripts/service.mjs status",
+    "server:service:restart": "bun scripts/service.mjs restart",
+    "server:service:uninstall": "bun scripts/service.mjs uninstall"
   }
 }

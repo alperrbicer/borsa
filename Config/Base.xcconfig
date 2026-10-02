@@ -1,2 +1,6 @@
 BORSA_BUNDLE_ID = dev.prototype.borsa
 #include? "Local.xcconfig"
+
+BORSA_SERVER_HOST =
+BORSA_SERVER_PIN =
+#include? "Server.local.xcconfig"

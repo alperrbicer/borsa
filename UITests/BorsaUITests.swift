@@ -70,6 +70,39 @@ final class BorsaUITests: XCTestCase {
         app.buttons["close-receipt"].tapReady()
     }
 
+    func testPaperDisconnectedHasNoExamplePricesAndAllTabsWork() {
+        continueAfterFailure = false
+        app = XCUIApplication()
+        app.launchArguments = ["--paper-ui-testing"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Gerçek veriye bağlan"].waitForExistence(timeout:15))
+        XCTAssertFalse(app.buttons["featured-detail"].exists)
+        capture("paper-01-unpaired")
+        selectTab("Piyasalar")
+        XCTAssertTrue(app.segmentedControls["paper-market-picker"].waitForExistence(timeout:10))
+        app.segmentedControls["paper-market-picker"].buttons["ABD"].tapReady()
+        XCTAssertTrue(app.staticTexts["Gösterilecek hisse yok"].exists)
+        selectTab("Portföy")
+        XCTAssertTrue(app.staticTexts["Hesap bağlantısı bekleniyor"].waitForExistence(timeout:10))
+        selectTab("Asistan")
+        XCTAssertTrue(app.staticTexts["Bekleyen karar yok"].waitForExistence(timeout:10))
+        capture("paper-02-assistant-empty")
+    }
+
+    func testPaperSecureConnectionSettingsAndDismissal() {
+        continueAfterFailure = false
+        app = XCUIApplication()
+        app.launchArguments = ["--paper-ui-testing"]
+        app.launch()
+        app.buttons["paper-settings"].tapReady()
+        XCTAssertTrue(app.textFields["paper-server-url"].waitForExistence(timeout:10))
+        XCTAssertTrue(app.secureTextFields["paper-pair-code"].exists)
+        XCTAssertFalse(app.buttons["Güvenli bağlan"].isEnabled)
+        capture("paper-03-settings")
+        app.buttons["Bitti"].tapReady()
+        XCTAssertTrue(app.staticTexts["Gerçek veriye bağlan"].waitForExistence(timeout:10))
+    }
+
     func testBuyReviewConfirmationAndPersistence() {
         launchAccount()
         capture("01-market-dark")
